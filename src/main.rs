@@ -1,7 +1,9 @@
 use std::time::Instant;
 
 use burn::{
-    backend::{libtorch::LibTorchDevice, ndarray::NdArrayDevice, LibTorch, NdArray},
+    backend::{
+        libtorch::LibTorchDevice, ndarray::NdArrayDevice, wgpu::WgpuDevice, LibTorch, NdArray, Wgpu,
+    },
     module::Module,
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{Int, Tensor},
@@ -62,7 +64,7 @@ fn main() {
 
     let tokenizer = Tokenizer::from_file("./tokenizer.json").unwrap();
     for each in decoder_res.iter_dim(0) {
-        let tensor_data = each.into_data();
+        let tensor_data = each.into_data().convert::<i64>();
         let tensor_slice: &[i64] = tensor_data.as_slice::<i64>().unwrap();
         let mut tensor_vec = Vec::with_capacity(200);
         for &each in tensor_slice {
