@@ -66,7 +66,7 @@ impl<B: Backend> TrOCRLearnedPositionalEmbedding<B> {
             &device,
         )
         .reshape([1, seq_length])
-        .repeat(0, batch_size);
+        .repeat(&[batch_size, 1]);
 
         let x = self.embed.forward(positions + self.offset as i32);
         x
