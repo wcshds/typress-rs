@@ -27,7 +27,10 @@ fn main() {
     let decoder = load_decoder();
 
     let image = ImageReader::read_images(
-        &["./images/01.png", "./images/02.png", "./images/03.png"],
+        &[
+            "./images/01.png",
+            // "./images/02.png", "./images/03.png"
+        ],
         Some(SizeInfo::new(384, 384)),
     );
     let tensor = image.to_tensor(
@@ -44,8 +47,14 @@ fn main() {
         Tensor::<Backend, 2, Int>::from_ints([[1]], &DEVICE).expand([batch_size as i32, -1]),
     );
 
+    let mut past_key_values = vec![];
     for i in 0..199 {
-        let res = decoder.forward(decoder_res.clone(), encoder_res.clone());
+        let (res, next_cache) = decoder.forward(
+            decoder_res.clone(),
+            encoder_res.clone(),
+            past_key_values,
+        );
+        past_key_values = next_cache;
         let idx = res
             .slice([0..batch_size, i..(i + 1)])
             .argmax(2)

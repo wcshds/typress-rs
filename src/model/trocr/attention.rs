@@ -24,39 +24,47 @@ impl<B: Backend> TrOCRAttention<B> {
         hidden_states: Tensor<B, 3>,
         key_value_states: Option<Tensor<B, 3>>,
         attention_mask: Option<Tensor<B, 4>>,
-    ) -> Tensor<B, 3> {
+        past_key_value: Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+    ) -> (Tensor<B, 3>, (Tensor<B, 4>, Tensor<B, 4>)) {
         let [batch_size, target_len, embed_dim] = hidden_states.dims();
 
         let query_states = self.q_proj.forward(hidden_states.clone()) * self.scaling;
         let [key_states, value_states] = if let Some(key_value_states) = key_value_states {
             // cross attention
-            let key_states = self.k_proj.forward(key_value_states.clone());
-            let value_states = self.v_proj.forward(key_value_states);
+            let (key_states, value_states);
+            if let Some(past_key_value) = past_key_value {
+                key_states = past_key_value.0;
+                value_states = past_key_value.1;
+            } else {
+                key_states = self._shape(
+                    self.k_proj.forward(key_value_states.clone()),
+                    -1,
+                    batch_size as i32,
+                );
+                value_states =
+                    self._shape(self.v_proj.forward(key_value_states), -1, batch_size as i32);
+            }
 
             [key_states, value_states]
         } else {
             // self attention
-            let key_states = self.k_proj.forward(hidden_states.clone());
-            let value_states = self.v_proj.forward(hidden_states);
+            let mut key_states = self._shape(
+                self.k_proj.forward(hidden_states.clone()),
+                -1,
+                batch_size as i32,
+            );
+            let mut value_states =
+                self._shape(self.v_proj.forward(hidden_states), -1, batch_size as i32);
+
+            if let Some(past_key_value) = past_key_value {
+                key_states = Tensor::cat(vec![past_key_value.0, key_states], 2);
+                value_states = Tensor::cat(vec![past_key_value.1, value_states], 2);
+            }
 
             [key_states, value_states]
         };
-        let key_states = key_states
-            .reshape([
-                batch_size as i32,
-                -1,
-                self.num_heads as i32,
-                self.head_dim as i32,
-            ])
-            .swap_dims(1, 2);
-        let value_states = value_states
-            .reshape([
-                batch_size as i32,
-                -1,
-                self.num_heads as i32,
-                self.head_dim as i32,
-            ])
-            .swap_dims(1, 2);
+
+        let past_key_value = (key_states.clone(), value_states.clone());
 
         let proj_shape = [
             (batch_size * self.num_heads) as i32,
@@ -100,7 +108,18 @@ impl<B: Backend> TrOCRAttention<B> {
 
         let attn_output = self.out_proj.forward(attn_output);
 
-        return attn_output;
+        return (attn_output, past_key_value);
+    }
+
+    fn _shape(&self, tensor: Tensor<B, 3>, seq_length: i32, batch_size: i32) -> Tensor<B, 4> {
+        tensor
+            .reshape([
+                batch_size,
+                seq_length,
+                self.num_heads as i32,
+                self.head_dim as i32,
+            ])
+            .swap_dims(1, 2)
     }
 }
 

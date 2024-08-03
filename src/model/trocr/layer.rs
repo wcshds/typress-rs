@@ -29,25 +29,52 @@ impl<B: Backend> TrOCRDecoderLayer<B> {
         attention_mask: Option<Tensor<B, 4>>,
         encoder_hidden_states: Option<Tensor<B, 3>>,
         encoder_attention_mask: Option<Tensor<B, 4>>,
-    ) -> Tensor<B, 3> {
+        past_key_value: (
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        ),
+    ) -> (
+        // hidden_states
+        Tensor<B, 3>,
+        // present_key_value
+        (
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        ),
+    ) {
         let residual = hidden_states.clone();
 
-        let hidden_states = self.self_attn.forward(hidden_states, None, attention_mask);
+        // decoder uni-directional self-attention cached key/values tuple
+        let self_attn_past_key_value = past_key_value.0;
+        // add present self-attn cache to first present_key_value tuple
+        let (hidden_states, present_key_value) = self.self_attn.forward(
+            hidden_states,
+            None,
+            attention_mask,
+            self_attn_past_key_value,
+        );
         let hidden_states = self.dropout.forward(hidden_states);
         let hidden_states = residual + hidden_states;
         let mut hidden_states = self.self_attn_layer_norm.forward(hidden_states);
 
+        let mut present_key_value_full = (Some(present_key_value), None);
         if let Some(encoder_hidden_states) = encoder_hidden_states {
             let residual = hidden_states.clone();
 
-            hidden_states = self.encoder_attn.forward(
+            // cross_attn cached key/values tuple
+            let cross_attn_past_key_value = past_key_value.1;
+            let (tmp, cross_attn_present_key_value) = self.encoder_attn.forward(
                 hidden_states,
                 Some(encoder_hidden_states),
                 encoder_attention_mask,
+                cross_attn_past_key_value,
             );
-            hidden_states = self.dropout.forward(hidden_states);
+            hidden_states = self.dropout.forward(tmp);
             hidden_states = residual + hidden_states;
             hidden_states = self.encoder_attn_layer_norm.forward(hidden_states);
+
+            // add cross-attn to present_key_value_full tuple
+            present_key_value_full.1 = Some(cross_attn_present_key_value)
         }
 
         // Fully Connected
@@ -61,7 +88,7 @@ impl<B: Backend> TrOCRDecoderLayer<B> {
         let hidden_states = residual + hidden_states;
         let hidden_states = self.final_layer_norm.forward(hidden_states);
 
-        hidden_states
+        (hidden_states, present_key_value_full)
     }
 }
 

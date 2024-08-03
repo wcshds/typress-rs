@@ -28,34 +28,74 @@ impl<B: Backend> TrOCRDecoder<B> {
         &self,
         input_ids: Tensor<B, 2, Int>,
         encoder_hidden_states: Tensor<B, 3>,
-    ) -> Tensor<B, 3> {
+        past_key_values: Vec<(
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        )>,
+    ) -> (
+        // hidden_states
+        Tensor<B, 3>,
+        // next_decoder_cache
+        Vec<(
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        )>,
+    ) {
         let [batch_size, target_len] = input_ids.dims();
         let device = encoder_hidden_states.device();
         let input_ids = input_ids.to_device(&device);
 
         let inputs_embeds = self.embed_tokens.forward(input_ids);
-        let embed_pos = self.embed_positions.forward(inputs_embeds.clone(), 0);
+
+        let past_key_values_lengths = if past_key_values.len() > 0 {
+            if let Some(content) = &past_key_values[0].0 {
+                content.0.dims()[2]
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        let embed_pos = self
+            .embed_positions
+            .forward(inputs_embeds.clone(), past_key_values_lengths);
         let hidden_states = inputs_embeds + embed_pos;
         let hidden_states = self.layernorm_embed.forward(hidden_states);
         let mut hidden_states = self.dropout.forward(hidden_states);
 
         let attention_mask = Tensor::triu(
-            Tensor::<B, 2>::ones([target_len, target_len], &device) * (-3.4028234663852886e38),
+            Tensor::<B, 2>::ones([target_len, target_len + past_key_values_lengths], &device)
+                * (-3.4028234663852886e38),
             1,
         )
-        .reshape([1, 1, target_len, target_len])
+        .reshape([1, 1, target_len, target_len + past_key_values_lengths])
         .expand([batch_size as i32, -1, -1, -1]);
 
-        for layer in &self.layers {
-            hidden_states = layer.forward(
+        let mut next_decoder_cache = Vec::with_capacity(self.layers.len());
+        for (idx, layer) in self.layers.iter().enumerate() {
+            let past_key_value = if past_key_values.len() == self.layers.len() {
+                (
+                    past_key_values[idx].0.clone(),
+                    past_key_values[idx].1.clone(),
+                )
+            } else {
+                (None, None)
+            };
+
+            let layer_outputs = layer.forward(
                 hidden_states,
                 Some(attention_mask.clone()),
                 Some(encoder_hidden_states.clone()),
                 None,
+                past_key_value,
             );
+            hidden_states = layer_outputs.0;
+
+            next_decoder_cache.push(layer_outputs.1);
         }
 
-        hidden_states
+        (hidden_states, next_decoder_cache)
     }
 }
 
@@ -138,11 +178,25 @@ impl<B: Backend> TrOCRForCausalLM<B> {
         &self,
         input_ids: Tensor<B, 2, Int>,
         encoder_hidden_states: Tensor<B, 3>,
-    ) -> Tensor<B, 3> {
-        let tensor = self.model.forward(input_ids, encoder_hidden_states);
-        let tensor = self.output_projection.forward(tensor);
+        past_key_values: Vec<(
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        )>,
+    ) -> (
+        // logits
+        Tensor<B, 3>,
+        // past_key_values
+        Vec<(
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+            Option<(Tensor<B, 4>, Tensor<B, 4>)>,
+        )>,
+    ) {
+        let outputs = self
+            .model
+            .forward(input_ids, encoder_hidden_states, past_key_values);
+        let logits = self.output_projection.forward(outputs.0);
 
-        tensor
+        (logits, outputs.1)
     }
 }
 
@@ -269,7 +323,9 @@ mod test {
             Tensor::<Backend, 2, Int>::from_ints([[1]], &DEVICE),
         );
         for i in 0..199 {
-            let res = decoder.forward(decoder_res.clone(), encoder_res.clone());
+            let res = decoder
+                .forward(decoder_res.clone(), encoder_res.clone(), vec![])
+                .0;
             let idx = res.slice([0..1, i..(i + 1)]).argmax(2).reshape([1, 1]);
             decoder_res = decoder_res.slice_assign([0..1, (i + 1)..(i + 2)], idx);
         }
