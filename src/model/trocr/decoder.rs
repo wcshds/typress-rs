@@ -32,6 +32,7 @@ impl<B: Backend> TrOCRDecoder<B> {
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
         )>,
+        attention_mask: Option<Tensor<B, 4>>,
     ) -> (
         // hidden_states
         Tensor<B, 3>,
@@ -41,7 +42,6 @@ impl<B: Backend> TrOCRDecoder<B> {
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
         )>,
     ) {
-        let [batch_size, target_len] = input_ids.dims();
         let device = encoder_hidden_states.device();
         let input_ids = input_ids.to_device(&device);
 
@@ -64,14 +64,6 @@ impl<B: Backend> TrOCRDecoder<B> {
         let hidden_states = self.layernorm_embed.forward(hidden_states);
         let mut hidden_states = self.dropout.forward(hidden_states);
 
-        let attention_mask = Tensor::triu(
-            Tensor::<B, 2>::ones([target_len, target_len + past_key_values_lengths], &device)
-                * (-3.4028234663852886e38),
-            1,
-        )
-        .reshape([1, 1, target_len, target_len + past_key_values_lengths])
-        .expand([batch_size as i32, -1, -1, -1]);
-
         let mut next_decoder_cache = Vec::with_capacity(self.layers.len());
         for (idx, layer) in self.layers.iter().enumerate() {
             let past_key_value = if past_key_values.len() == self.layers.len() {
@@ -85,7 +77,7 @@ impl<B: Backend> TrOCRDecoder<B> {
 
             let layer_outputs = layer.forward(
                 hidden_states,
-                Some(attention_mask.clone()),
+                attention_mask.clone(),
                 Some(encoder_hidden_states.clone()),
                 None,
                 past_key_value,
@@ -182,6 +174,7 @@ impl<B: Backend> TrOCRForCausalLM<B> {
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
         )>,
+        attention_mask: Option<Tensor<B, 4>>,
     ) -> (
         // logits
         Tensor<B, 3>,
@@ -191,12 +184,125 @@ impl<B: Backend> TrOCRForCausalLM<B> {
             Option<(Tensor<B, 4>, Tensor<B, 4>)>,
         )>,
     ) {
-        let outputs = self
-            .model
-            .forward(input_ids, encoder_hidden_states, past_key_values);
+        let outputs = self.model.forward(
+            input_ids,
+            encoder_hidden_states,
+            past_key_values,
+            attention_mask,
+        );
         let logits = self.output_projection.forward(outputs.0);
 
         (logits, outputs.1)
+    }
+
+    fn generate_with_cache(
+        &self,
+        encoder_res: Tensor<B, 3>,
+        max_iteration: usize,
+    ) -> Tensor<B, 2, Int> {
+        let batch_size = encoder_res.dims()[0];
+        let device = encoder_res.device();
+
+        let mut idx: Tensor<B, 2, Int> = Tensor::ones([batch_size, 1], &device);
+        let mut past_key_values = Vec::with_capacity(0);
+        let mut res_ids = Tensor::ones([batch_size, 1], &device);
+        for i in 0..max_iteration {
+            let (res, next_cache) =
+                self.forward(idx.clone(), encoder_res.clone(), past_key_values, None);
+            idx = res.argmax(2).flatten(1, 2);
+            // Python Code:
+            //   past_key_values = [
+            //       (each[0][:, :, 0 : i + 1, :], each[1][:, :, 0 : i + 1, :], each[2], each[3])
+            //       for each in past_key_values
+            //   ]
+            past_key_values = next_cache
+                .into_iter()
+                .map(|(self_attn_reserve, cross_attn_reserve)| {
+                    let self_attn_reserve = self_attn_reserve.unwrap();
+                    let self_attn_key =
+                        self_attn_reserve
+                            .0
+                            .slice([None, None, Some((0, (i + 1) as i64)), None]);
+                    let self_attn_value =
+                        self_attn_reserve
+                            .1
+                            .slice([None, None, Some((0, (i + 1) as i64)), None]);
+                    (Some((self_attn_key, self_attn_value)), cross_attn_reserve)
+                })
+                .collect();
+            res_ids = Tensor::cat(vec![res_ids, idx.clone()], 1);
+
+            if Tensor::all(idx.clone().equal_elem(2))
+                .to_data()
+                .as_slice::<bool>()
+                .unwrap()
+                == &[true]
+            {
+                break;
+            };
+        }
+
+        res_ids
+    }
+
+    pub fn generate_without_cache(
+        &self,
+        encoder_res: Tensor<B, 3>,
+        max_iteration: usize,
+    ) -> Tensor<B, 2, Int> {
+        let batch_size = encoder_res.dims()[0];
+        let device = encoder_res.device();
+        let target_len = max_iteration + 1;
+
+        let res_ids: Tensor<B, 2, Int> = Tensor::zeros([batch_size, target_len], &device);
+        let mut res_ids = res_ids.slice_assign(
+            [0..batch_size, 0..1],
+            Tensor::<B, 2, Int>::from_ints([[1]], &device).expand([batch_size as i32, -1]),
+        );
+        let attention_mask = Tensor::triu(
+            Tensor::<B, 2>::ones([target_len, target_len], &device) * (-3.4028234663852886e38),
+            1,
+        )
+        .reshape([1, 1, target_len, target_len])
+        .expand([batch_size as i32, -1, -1, -1]);
+
+        for i in 0..max_iteration {
+            let (res, _) = self.forward(
+                res_ids.clone(),
+                encoder_res.clone(),
+                Vec::with_capacity(0),
+                Some(attention_mask.clone()),
+            );
+            let idx = res
+                .slice([0..batch_size, i..(i + 1)])
+                .argmax(2)
+                .reshape([batch_size, 1]);
+            res_ids = res_ids.slice_assign([0..batch_size, (i + 1)..(i + 2)], idx.clone());
+
+            if Tensor::all(idx.equal_elem(2))
+                .to_data()
+                .as_slice::<bool>()
+                .unwrap()
+                == &[true]
+            {
+                break;
+            };
+        }
+
+        res_ids
+    }
+
+    pub fn generate(
+        &self,
+        encoder_res: Tensor<B, 3>,
+        max_iteration: usize,
+        use_cache: bool,
+    ) -> Tensor<B, 2, Int> {
+        if use_cache {
+            self.generate_with_cache(encoder_res, max_iteration)
+        } else {
+            self.generate_without_cache(encoder_res, max_iteration)
+        }
     }
 }
 
@@ -259,49 +365,59 @@ impl TrOCRForCausalLMConfig {
 mod test {
     use burn::{
         backend::{libtorch::LibTorchDevice, LibTorch},
-        module::{Module, Param},
-        record::{FullPrecisionSettings, PrettyJsonFileRecorder},
-        tensor::{Int, Tensor},
+        module::Module,
+        record::{BinFileRecorder, FullPrecisionSettings, PrettyJsonFileRecorder},
+        tensor::Tensor,
     };
 
-    use crate::model::{
-        deit::deit_model::{DeiTModel, DeiTModelConfig},
-        trocr::decoder::TrOCRForCausalLMConfig,
+    use crate::{
+        image_processing::{ImageReader, NormalizeInfo, SizeInfo},
+        model::{
+            deit::deit_model::{DeiTModel, DeiTModelConfig},
+            trocr::decoder::TrOCRForCausalLMConfig,
+        },
     };
 
-    use super::TrOCRDecoderLayerConfig;
+    use super::{TrOCRDecoderLayerConfig, TrOCRForCausalLM};
 
     type Backend = LibTorch;
     const DEVICE: LibTorchDevice = LibTorchDevice::Cuda(0);
 
     fn init_tensor() -> Tensor<Backend, 4> {
-        let tensor = Param::from_tensor(Tensor::<Backend, 4>::empty([1, 3, 384, 384], &DEVICE));
-        let pfr = PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-        let tensor = tensor.load_file("./tensor.json", &pfr, &DEVICE).unwrap();
-        let tensor = tensor.val();
+        let image = ImageReader::read_images(&["./images/01.png"], Some(SizeInfo::new(384, 384)));
+        let tensor = image.to_tensor(
+            &DEVICE,
+            Some(1.0 / 255.0),
+            Some(NormalizeInfo::new([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])),
+        );
 
         tensor
     }
 
-    pub fn load_deit_model() -> DeiTModel<Backend> {
+    fn load_deit_model() -> DeiTModel<Backend> {
+        let bfr = BinFileRecorder::<FullPrecisionSettings>::new();
         let deit_model = DeiTModelConfig::new().init::<Backend>(&DEVICE);
-
-        let pfr: PrettyJsonFileRecorder<FullPrecisionSettings> =
-            PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-
         let deit_model = deit_model
-            .load_file("./deit_model.json", &pfr, &DEVICE)
+            .load_file("./weights/deit_model.bin", &bfr, &DEVICE)
             .unwrap();
 
         deit_model
     }
 
+    fn load_decoder() -> TrOCRForCausalLM<Backend> {
+        let bfr = BinFileRecorder::<FullPrecisionSettings>::new();
+        let decoder = TrOCRForCausalLMConfig::new().init(&DEVICE);
+        let decoder = decoder
+            .load_file("./weights/decoder.bin", &bfr, &DEVICE)
+            .unwrap();
+
+        decoder
+    }
+
     #[test]
     pub fn save() {
         let x = TrOCRDecoderLayerConfig::new().init::<Backend>(&DEVICE);
-
-        let pfr: PrettyJsonFileRecorder<FullPrecisionSettings> =
-            PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
+        let pfr = PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
 
         x.save_file("./decoder_layer.json", &pfr).unwrap();
     }
@@ -310,26 +426,11 @@ mod test {
     fn test_correctness() {
         let tensor = init_tensor();
         let deit_model = load_deit_model();
-        let pfr = PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-        let decoder = TrOCRForCausalLMConfig::new().init(&DEVICE);
-        let decoder = decoder.load_file("./decoder.json", &pfr, &DEVICE).unwrap();
-        // decoder.clone().save_file("./decoder.json", &pfr).unwrap();
+        let decoder = load_decoder();
 
         let encoder_res = deit_model.forward(tensor);
+        let res_ids = decoder.generate(encoder_res, 200, false);
 
-        let decoder_res: Tensor<Backend, 2, Int> = Tensor::zeros([1, 200], &DEVICE);
-        let mut decoder_res = decoder_res.slice_assign(
-            [0..1, 0..1],
-            Tensor::<Backend, 2, Int>::from_ints([[1]], &DEVICE),
-        );
-        for i in 0..199 {
-            let res = decoder
-                .forward(decoder_res.clone(), encoder_res.clone(), vec![])
-                .0;
-            let idx = res.slice([0..1, i..(i + 1)]).argmax(2).reshape([1, 1]);
-            decoder_res = decoder_res.slice_assign([0..1, (i + 1)..(i + 2)], idx);
-        }
-
-        println!("{}", decoder_res);
+        println!("{}", res_ids);
     }
 }

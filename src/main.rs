@@ -6,7 +6,6 @@ use burn::{
     },
     module::Module,
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{Int, Tensor},
 };
 use tokenizers::Tokenizer;
 use typress_rs::{
@@ -25,12 +24,10 @@ fn main() {
 
     let encoder = load_deit_model();
     let decoder = load_decoder();
+    let tokenizer = Tokenizer::from_file("./tokenizer.json").unwrap();
 
     let image = ImageReader::read_images(
-        &[
-            "./images/01.png",
-            // "./images/02.png", "./images/03.png"
-        ],
+        &["./images/01.png", "./images/02.png", "./images/03.png"],
         Some(SizeInfo::new(384, 384)),
     );
     let tensor = image.to_tensor(
@@ -39,43 +36,13 @@ fn main() {
         Some(NormalizeInfo::new([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])),
     );
     let encoder_res = encoder.forward(tensor);
-    let batch_size = encoder_res.dims()[0];
 
-    let decoder_res: Tensor<Backend, 2, Int> = Tensor::zeros([batch_size, 200], &DEVICE);
-    let mut decoder_res = decoder_res.slice_assign(
-        [0..batch_size, 0..1],
-        Tensor::<Backend, 2, Int>::from_ints([[1]], &DEVICE).expand([batch_size as i32, -1]),
-    );
+    let res_ids = decoder.generate(encoder_res, 200, true);
 
-    let mut past_key_values = vec![];
-    for i in 0..199 {
-        let (res, next_cache) = decoder.forward(
-            decoder_res.clone(),
-            encoder_res.clone(),
-            past_key_values,
-        );
-        past_key_values = next_cache;
-        let idx = res
-            .slice([0..batch_size, i..(i + 1)])
-            .argmax(2)
-            .reshape([batch_size, 1]);
-        decoder_res = decoder_res.slice_assign([0..batch_size, (i + 1)..(i + 2)], idx.clone());
-
-        if Tensor::all(idx.equal_elem(2))
-            .to_data()
-            .as_slice::<bool>()
-            .unwrap()
-            == &[true]
-        {
-            break;
-        };
-    }
-
-    let tokenizer = Tokenizer::from_file("./tokenizer.json").unwrap();
-    for each in decoder_res.iter_dim(0) {
+    for each in res_ids.iter_dim(0) {
         let tensor_data = each.into_data().convert::<i64>();
-        let tensor_slice: &[i64] = tensor_data.as_slice::<i64>().unwrap();
-        let mut tensor_vec = Vec::with_capacity(200);
+        let tensor_slice = tensor_data.as_slice::<i64>().unwrap();
+        let mut tensor_vec = Vec::new();
         for &each in tensor_slice {
             if each == 2 {
                 break;
@@ -85,7 +52,7 @@ fn main() {
         }
 
         let res = tokenizer.decode(&tensor_vec, true).unwrap();
-        println!("{}", res);
+        println!("$ {} $\n", res);
     }
 
     println!("execution time: {}", start.elapsed().as_secs_f64());
