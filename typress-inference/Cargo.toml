@@ -1,0 +1,34 @@
+[package]
+name = "typress-inference"
+authors = ["WU Chen (@wcshds)"]
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[features]
+ndarray = ["burn/ndarray", "typress-core/ndarray"]
+ndarray-blas-accelerate = [
+    "burn/ndarray",
+    "burn/accelerate",
+    "typress-core/ndarray-blas-accelerate",
+]
+ndarray-blas-netlib = [
+    "burn/ndarray",
+    "burn/blas-netlib",
+    "typress-core/ndarray-blas-netlib",
+]
+ndarray-blas-openblas = [
+    "burn/ndarray",
+    "burn/openblas",
+    "typress-core/ndarray-blas-openblas",
+]
+tch-cpu = ["burn/tch", "typress-core/tch"]
+tch-gpu = ["burn/tch", "typress-core/tch"]
+wgpu = ["burn/wgpu", "typress-core/wgpu"]
+candle-cpu = ["burn/candle", "typress-core/candle-cpu"]
+candle-gpu = ["burn/candle-cuda", "typress-core/candle-gpu"]
+
+[dependencies]
+burn = { workspace = true }
+typress-core = { path = "../typress-core" }
+tokenizers = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "typress-core"
+authors = ["WU Chen (@wcshds)"]
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[features]
+default = ["ndarray"]
+ndarray = ["burn/ndarray"]
+ndarray-blas-accelerate = ["burn/ndarray", "burn/accelerate"]
+ndarray-blas-netlib = ["burn/ndarray", "burn/blas-netlib"]
+ndarray-blas-openblas = ["burn/ndarray", "burn/openblas"]
+tch = ["burn/tch"]
+wgpu = ["burn/wgpu"]
+candle-cpu = ["burn/candle"]
+candle-gpu = ["burn/candle-cuda"]
+
+[dependencies]
+burn = { workspace = true }
+image = { workspace = true }

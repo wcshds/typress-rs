@@ -1,18 +1,15 @@
-[package]
-name = "typress-rs"
+[workspace]
+resolver = "2"
+members = ["typress-core", "typress-inference"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["WU Chen (@wcshds)"]
+license = "MIT"
 
-[dependencies]
-burn = { git = "https://github.com/tracel-ai/burn.git", features = [
-    "tch",
-    "ndarray",
-    "wgpu",
-    "candle",
-    "openblas",
-] }
-image = "0.25.2"
+[workspace.dependencies]
+burn = { git = "https://github.com/tracel-ai/burn.git" }
+image = "0.25.1"
 tokenizers = "0.19.1"
 
 [profile.dev]

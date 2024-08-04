@@ -85,46 +85,50 @@ impl DeiTModelConfig {
 
 #[cfg(test)]
 mod test {
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    use super::{DeiTModel, DeiTModelConfig};
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    use crate::image_processing::{ImageReader, NormalizeInfo, SizeInfo};
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     use burn::{
         backend::{ndarray::NdArrayDevice, NdArray},
-        module::{Module, Param},
-        record::{FullPrecisionSettings, PrettyJsonFileRecorder},
+        module::Module,
+        record::{BinFileRecorder, FullPrecisionSettings, PrettyJsonFileRecorder},
         tensor::Tensor,
     };
 
-    use super::{DeiTModel, DeiTModelConfig};
-
+    #[cfg(feature = "ndarray")]
     type Backend = NdArray;
+    #[cfg(feature = "ndarray")]
+    const DEVICE: NdArrayDevice = NdArrayDevice::Cpu;
 
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn init_tensor() -> Tensor<Backend, 4> {
-        let device = NdArrayDevice::Cpu;
-
-        let tensor = Param::from_tensor(Tensor::<Backend, 4>::empty([1, 3, 384, 384], &device));
-        let pfr = PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-        let tensor = tensor.load_file("./tensor.json", &pfr, &device).unwrap();
-        let tensor = tensor.val();
+        let image = ImageReader::read_images(&["../images/01.png"], Some(SizeInfo::new(384, 384)));
+        let tensor = image.to_tensor(
+            &DEVICE,
+            Some(1.0 / 255.0),
+            Some(NormalizeInfo::new([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])),
+        );
 
         tensor
     }
 
-    pub fn load_deit_model() -> DeiTModel<Backend> {
-        let device = NdArrayDevice::Cpu;
-        let deit_model = DeiTModelConfig::new().init::<Backend>(&device);
-
-        let pfr: PrettyJsonFileRecorder<FullPrecisionSettings> =
-            PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    fn load_deit_model() -> DeiTModel<Backend> {
+        let bfr = BinFileRecorder::<FullPrecisionSettings>::new();
+        let deit_model = DeiTModelConfig::new().init::<Backend>(&DEVICE);
         let deit_model = deit_model
-            .load_file("./deit_model.json", &pfr, &device)
+            .load_file("../weights/deit_model.bin", &bfr, &DEVICE)
             .unwrap();
 
         deit_model
     }
 
     #[test]
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     pub fn save() {
-        let device = NdArrayDevice::Cpu;
-        let x = DeiTModelConfig::new().init::<Backend>(&device);
+        let x = DeiTModelConfig::new().init::<Backend>(&DEVICE);
 
         let pfr: PrettyJsonFileRecorder<FullPrecisionSettings> =
             PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
@@ -133,6 +137,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn test_correctness() {
         let tensor = init_tensor();
         let deit_model = load_deit_model();

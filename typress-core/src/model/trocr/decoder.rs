@@ -363,13 +363,9 @@ impl TrOCRForCausalLMConfig {
 
 #[cfg(test)]
 mod test {
-    use burn::{
-        backend::{libtorch::LibTorchDevice, LibTorch},
-        module::Module,
-        record::{BinFileRecorder, FullPrecisionSettings, PrettyJsonFileRecorder},
-        tensor::Tensor,
-    };
-
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    use super::TrOCRForCausalLM;
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     use crate::{
         image_processing::{ImageReader, NormalizeInfo, SizeInfo},
         model::{
@@ -377,14 +373,30 @@ mod test {
             trocr::decoder::TrOCRForCausalLMConfig,
         },
     };
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    use burn::{
+        module::Module,
+        record::{BinFileRecorder, FullPrecisionSettings},
+        tensor::Tensor,
+    };
 
-    use super::{TrOCRDecoderLayerConfig, TrOCRForCausalLM};
-
+    #[cfg(feature = "tch")]
+    use burn::backend::{libtorch::LibTorchDevice, LibTorch};
+    #[cfg(feature = "tch")]
     type Backend = LibTorch;
+    #[cfg(feature = "tch")]
     const DEVICE: LibTorchDevice = LibTorchDevice::Cuda(0);
 
+    #[cfg(feature = "ndarray")]
+    use burn::backend::{ndarray::NdArrayDevice, NdArray};
+    #[cfg(feature = "ndarray")]
+    type Backend = NdArray;
+    #[cfg(feature = "ndarray")]
+    const DEVICE: NdArrayDevice = NdArrayDevice::Cpu;
+
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn init_tensor() -> Tensor<Backend, 4> {
-        let image = ImageReader::read_images(&["./images/01.png"], Some(SizeInfo::new(384, 384)));
+        let image = ImageReader::read_images(&["../images/01.png"], Some(SizeInfo::new(384, 384)));
         let tensor = image.to_tensor(
             &DEVICE,
             Some(1.0 / 255.0),
@@ -394,35 +406,30 @@ mod test {
         tensor
     }
 
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn load_deit_model() -> DeiTModel<Backend> {
         let bfr = BinFileRecorder::<FullPrecisionSettings>::new();
         let deit_model = DeiTModelConfig::new().init::<Backend>(&DEVICE);
         let deit_model = deit_model
-            .load_file("./weights/deit_model.bin", &bfr, &DEVICE)
+            .load_file("../weights/deit_model.bin", &bfr, &DEVICE)
             .unwrap();
 
         deit_model
     }
 
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn load_decoder() -> TrOCRForCausalLM<Backend> {
         let bfr = BinFileRecorder::<FullPrecisionSettings>::new();
         let decoder = TrOCRForCausalLMConfig::new().init(&DEVICE);
         let decoder = decoder
-            .load_file("./weights/decoder.bin", &bfr, &DEVICE)
+            .load_file("../weights/decoder.bin", &bfr, &DEVICE)
             .unwrap();
 
         decoder
     }
 
     #[test]
-    pub fn save() {
-        let x = TrOCRDecoderLayerConfig::new().init::<Backend>(&DEVICE);
-        let pfr = PrettyJsonFileRecorder::<FullPrecisionSettings>::new();
-
-        x.save_file("./decoder_layer.json", &pfr).unwrap();
-    }
-
-    #[test]
+    #[cfg(any(feature = "ndarray", feature = "tch"))]
     fn test_correctness() {
         let tensor = init_tensor();
         let deit_model = load_deit_model();
