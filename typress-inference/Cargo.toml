@@ -29,6 +29,6 @@ candle-cpu = ["burn/candle"]
 candle-gpu = ["burn/candle-cuda"]
 
 [dependencies]
-burn = { workspace = true }
+burn = { workspace = true, features = ["std"] }
 typress-core = { path = "../typress-core" }
 tokenizers = { workspace = true }
