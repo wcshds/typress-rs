@@ -1,9 +1,10 @@
+use alloc::{collections::BTreeMap, string::String};
 use burn::{
     module::Module,
     prelude::Backend,
     record::{BinBytesRecorder, FullPrecisionSettings, Recorder},
 };
-// use tokenizers::Tokenizer;
+use once_cell::sync::Lazy;
 use typress_core::model::{
     deit::deit_model::{DeiTModel, DeiTModelConfig},
     trocr::decoder::{TrOCRForCausalLM, TrOCRForCausalLMConfig},
@@ -11,7 +12,9 @@ use typress_core::model::{
 
 static DEIT_MODEL_BIN: &[u8] = include_bytes!("../../weights/deit_model.bin");
 static DECODER_BIN: &[u8] = include_bytes!("../../weights/decoder.bin");
-// static TOKENIZER_JSON: &[u8] = include_bytes!("../../tokenizer.json");
+include!("./vocab.rs");
+static VOCAB: Lazy<BTreeMap<u32, &'static str>> =
+    Lazy::new(|| BTreeMap::from_iter(VOCAB_VEC.into_iter().map(|&each| each)));
 
 pub fn load_deit_model<B: Backend>(device: &B::Device) -> DeiTModel<B> {
     let bbr = BinBytesRecorder::<FullPrecisionSettings>::new();
@@ -35,4 +38,19 @@ pub fn load_decoder<B: Backend>(device: &B::Device) -> TrOCRForCausalLM<B> {
     let decoder = decoder.load_record(record);
 
     decoder
+}
+
+pub fn decode(ids: &[u32], skip_special_tokens: bool) -> String {
+    ids.iter()
+        .map(|each| {
+            let word = *VOCAB.get(each).expect("Decoder encountered an unknown id.");
+
+            if skip_special_tokens && (0..=4).contains(each) {
+                ""
+            } else {
+                word
+            }
+        })
+        .map(|each| each.replace("Ġ", " "))
+        .collect()
 }

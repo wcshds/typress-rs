@@ -8,6 +8,9 @@ version.workspace = true
 [lib]
 crate-type = ["cdylib"]
 
+[build-dependencies]
+serde_json = { version = "*" }
+
 [dependencies]
 burn = { workspace = true, features = ["ndarray", "candle", "wgpu"] }
 typress-core = { path = "../typress-core", default-features = false, features = [
@@ -15,7 +18,7 @@ typress-core = { path = "../typress-core", default-features = false, features = 
     "candle-cpu",
     "wgpu",
 ] }
-# tokenizers = { workspace = true }
+once_cell = { version = "1.19.0", features = ["alloc"] }
 
 log = "0.4.22"
 serde = "1.0.204"

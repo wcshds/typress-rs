@@ -15,7 +15,7 @@ use burn::{
 use wasm_bindgen::prelude::*;
 use wasm_timer::Instant;
 
-use crate::utils::{load_decoder, load_deit_model};
+use crate::utils::{decode, load_decoder, load_deit_model};
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -59,7 +59,7 @@ impl TrOCR {
             ModelType::WithNdArrayBackend(ref model) => model.generate(input).await,
             ModelType::WithWgpuBackend(ref model) => model.generate(input).await,
         };
-        // let res_str = tokenizer.decode(&res_ids, true).unwrap();
+        let res_str = decode(&res_ids, true);
 
         let duration = start.elapsed();
 

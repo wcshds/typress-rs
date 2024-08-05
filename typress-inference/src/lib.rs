@@ -14,11 +14,7 @@ pub fn inference<B: Backend>(device: &B::Device) {
     let tokenizer = Tokenizer::from_file("../tokenizer.json").unwrap();
 
     let tensor = init_image_tensor(
-        &[
-            "../images/01.png",
-            "../images/02.png",
-            "../images/03.png",
-        ],
+        &["../images/01.png", "../images/02.png", "../images/03.png"],
         device,
     );
 
