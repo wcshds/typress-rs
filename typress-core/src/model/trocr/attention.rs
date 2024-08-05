@@ -1,3 +1,4 @@
+use alloc::vec;
 use burn::{
     config::Config,
     module::Module,

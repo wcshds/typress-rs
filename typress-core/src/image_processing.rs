@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use alloc::vec::Vec;
+
 use burn::tensor::{backend::Backend, Shape, Tensor, TensorData};
 
 #[derive(Debug)]

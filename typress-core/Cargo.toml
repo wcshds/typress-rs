@@ -6,7 +6,8 @@ license.workspace = true
 version.workspace = true
 
 [features]
-default = ["ndarray"]
+default = ["ndarray", "std"]
+std = []
 ndarray = ["burn/ndarray"]
 ndarray-blas-accelerate = ["burn/ndarray", "burn/accelerate"]
 ndarray-blas-netlib = ["burn/ndarray", "burn/blas-netlib"]

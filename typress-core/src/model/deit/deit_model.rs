@@ -137,7 +137,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(any(feature = "ndarray", feature = "tch"))]
+    #[cfg(all(any(feature = "ndarray", feature = "tch"), feature = "std"))]
     fn test_correctness() {
         let tensor = init_tensor();
         let deit_model = load_deit_model();
