@@ -10,23 +10,23 @@ ndarray = ["burn/ndarray", "typress-core/ndarray"]
 ndarray-blas-accelerate = [
     "burn/ndarray",
     "burn/accelerate",
-    "typress-core/ndarray-blas-accelerate",
+    "typress-core/ndarray",
 ]
 ndarray-blas-netlib = [
     "burn/ndarray",
     "burn/blas-netlib",
-    "typress-core/ndarray-blas-netlib",
+    "typress-core/ndarray",
 ]
 ndarray-blas-openblas = [
     "burn/ndarray",
     "burn/openblas",
-    "typress-core/ndarray-blas-openblas",
+    "typress-core/ndarray",
 ]
 tch-cpu = ["burn/tch", "typress-core/tch"]
 tch-gpu = ["burn/tch", "typress-core/tch"]
-wgpu = ["burn/wgpu", "typress-core/wgpu"]
-candle-cpu = ["burn/candle", "typress-core/candle-cpu"]
-candle-gpu = ["burn/candle-cuda", "typress-core/candle-gpu"]
+wgpu = ["burn/wgpu"]
+candle-cpu = ["burn/candle"]
+candle-gpu = ["burn/candle-cuda"]
 
 [dependencies]
 burn = { workspace = true }

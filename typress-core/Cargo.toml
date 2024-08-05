@@ -9,14 +9,8 @@ version.workspace = true
 default = ["ndarray", "std"]
 std = []
 ndarray = ["burn/ndarray"]
-ndarray-blas-accelerate = ["burn/ndarray", "burn/accelerate"]
-ndarray-blas-netlib = ["burn/ndarray", "burn/blas-netlib"]
-ndarray-blas-openblas = ["burn/ndarray", "burn/openblas"]
 tch = ["burn/tch"]
-wgpu = ["burn/wgpu"]
-candle-cpu = ["burn/candle"]
-candle-gpu = ["burn/candle-cuda"]
 
 [dependencies]
-burn = { workspace = true }
+burn = { workspace = true, default-features = false }
 image = { workspace = true }

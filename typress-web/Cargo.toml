@@ -15,8 +15,6 @@ serde_json = { version = "*" }
 burn = { workspace = true, features = ["ndarray", "candle", "wgpu"] }
 typress-core = { path = "../typress-core", default-features = false, features = [
     "ndarray",
-    "candle-cpu",
-    "wgpu",
 ] }
 once_cell = { version = "1.19.0", features = ["alloc"] }
 

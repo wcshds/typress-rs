@@ -1,6 +1,6 @@
 #![allow(clippy::new_without_default)]
 
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 use core::convert::Into;
 use typress_core::model::{deit::deit_model::DeiTModel, trocr::decoder::TrOCRForCausalLM};
 
@@ -40,7 +40,7 @@ impl TrOCR {
     /// Constructor called by JavaScripts with the new keyword.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        log::info!("Initializing the image classifier");
+        log::info!("Initializing the Typress model...");
         let device = Default::default();
         Self {
             model: ModelType::WithNdArrayBackend(Model::new(&device)),
@@ -48,8 +48,12 @@ impl TrOCR {
     }
 
     /// Runs inference on the image
-    pub async fn inference(&self, input: &[f32]) -> Result<JsValue, JsValue> {
-        log::info!("Generate Typst formula from the image");
+    ///
+    /// ## Parameters:
+    ///
+    /// input: a [3, height, width] flattened f32 array, all numbers should be rescaled (* 1./255.)
+    pub async fn inference(&self, input: &[f32]) -> Result<String, JsValue> {
+        log::info!("Generate Typst formula from the image...");
 
         // let tokenizer = load_tokenizer();
         let start = Instant::now();
@@ -65,7 +69,7 @@ impl TrOCR {
 
         log::debug!("Inference is completed in {:?}", duration);
 
-        Ok(serde_wasm_bindgen::to_value(&res_ids)?)
+        Ok(res_str)
     }
 
     /// Sets the backend to Candle
@@ -137,10 +141,19 @@ impl<B: Backend> Model<B> {
         }
     }
 
-    /// generate labels for each id
+    /// Generate labels for each id.
+    ///
+    /// ## Parameters:
+    ///
+    /// input: a [3, height, width] flattened f32 array, all numbers should be rescaled (* 1./255.)
     pub async fn generate(&self, input: &[f32]) -> Vec<u32> {
-        let input = Tensor::<B, 1>::from_floats(input, &B::Device::default())
-            .reshape([1, CHANNELS, HEIGHT, WIDTH]);
+        let device = B::Device::default();
+        let input =
+            Tensor::<B, 1>::from_floats(input, &device).reshape([1, CHANNELS, HEIGHT, WIDTH]);
+        // normalize
+        let input = (input
+            - Tensor::<B, 1>::from_floats([0.5, 0.5, 0.5], &device).reshape([1, 3, 1, 1]))
+            / Tensor::<B, 1>::from_floats([0.5, 0.5, 0.5], &device).reshape([1, 3, 1, 1]);
 
         let encoder_res = self.encoder.forward(input);
         let res_ids = self.decoder.generate(encoder_res, 200, true);
