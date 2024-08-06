@@ -13,8 +13,9 @@ fn main() {
     let vocab_value = res["model"]["vocab"].clone();
     let vocab: HashMap<String, u32> = serde_json::from_value(vocab_value)
         .expect("Json file does not contain `[model][vocab]` field or this field is not a map.");
-    let vocab_reverse: Vec<(u32, String)> =
+    let mut vocab_reverse: Vec<(u32, String)> =
         vocab.into_iter().map(|(key, value)| (value, key)).collect();
+    vocab_reverse.sort_by_key(|&(each, _)| each);
 
     fs::write(
         "./src/vocab.rs",
