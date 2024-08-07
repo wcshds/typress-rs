@@ -62,7 +62,36 @@ mod candle_cpu {
 mod wgpu {
     use std::env;
 
-    use burn::backend::wgpu::{Wgpu, WgpuDevice};
+    use burn_wgpu::{Wgpu, WgpuDevice};
+    use typress_inference::inference;
+
+    pub fn run() {
+        let mut args = env::args();
+        args.next();
+        let device = if let Some(arg) = args.next() {
+            match &arg.to_lowercase()[..] {
+                "cpu" => WgpuDevice::Cpu,
+                "integrated_gpu" | "integrate_gpu" | "integratedgpu" | "integrategpu" => {
+                    WgpuDevice::IntegratedGpu(0)
+                }
+                "discrete_gpu" | "discreted_gpu" | "discretegpu" | "discretedgpu" => {
+                    WgpuDevice::DiscreteGpu(0)
+                }
+                _ => WgpuDevice::BestAvailable,
+            }
+        } else {
+            WgpuDevice::BestAvailable
+        };
+
+        inference::<Wgpu>(&device);
+    }
+}
+
+#[cfg(feature = "wgpu-without-fusion")]
+mod wgpu_pure {
+    use std::env;
+
+    use burn_wgpu::{Wgpu, WgpuDevice};
     use typress_inference::inference;
 
     pub fn run() {
@@ -105,4 +134,6 @@ fn main() {
     candle_cpu::run();
     #[cfg(feature = "wgpu")]
     wgpu::run();
+    #[cfg(feature = "wgpu-without-fusion")]
+    wgpu_pure::run();
 }
