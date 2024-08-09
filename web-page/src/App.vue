@@ -11,9 +11,10 @@ enum BackendType {
 
 const backendSelect = ref(BackendType.Ndarray);
 
-// image
+// ref dom
 const imageCanvas: Ref<HTMLCanvasElement | null> = ref(null);
 const imageDisplay: Ref<HTMLImageElement | null> = ref(null);
+const imageInput: Ref<HTMLInputElement | null> = ref(null);
 // canvas context
 let ctx: CanvasRenderingContext2D | null = null;
 // typress inference model
@@ -51,7 +52,10 @@ watch(backendSelect, async () => {
 
 async function handleImageChange(event: Event) {
   let target = event.target as HTMLInputElement;
-  reset();
+  resString.value = "";
+  if (imageDisplay.value !== null) {
+    imageDisplay.value.src = "";
+  }
 
   if (target.files && target.files.length > 0) {
     let file = target.files[0];
@@ -89,11 +93,14 @@ function reset() {
   if (imageDisplay.value !== null) {
     imageDisplay.value.src = "";
   }
+  if (imageInput.value !== null) {
+    imageInput.value.value = "";
+  }
 }
 
 function extractRGBValuesFromCanvas(
   canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D
 ) {
   // Get image data from the canvas
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -144,7 +151,12 @@ function extractRGBValuesFromCanvas(
 
     <!-- Image Input -->
     <div>
-      <input type="file" @change="handleImageChange" accept="image/*" />
+      <input
+        type="file"
+        @change="handleImageChange"
+        accept="image/*"
+        ref="imageInput"
+      />
     </div>
 
     <!-- the actual <img> used to display image -->

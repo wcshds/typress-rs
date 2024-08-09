@@ -5,7 +5,7 @@ use burn::{
     module::Module,
     nn::{Dropout, DropoutConfig, LayerNorm, LayerNormConfig, Linear, LinearConfig},
     prelude::Backend,
-    tensor::{Int, Tensor},
+    tensor::{try_read_sync, Int, Tensor},
 };
 
 use super::{
@@ -197,7 +197,7 @@ impl<B: Backend> TrOCRForCausalLM<B> {
         (logits, outputs.1)
     }
 
-    fn generate_with_cache(
+    async fn generate_with_cache_async(
         &self,
         encoder_res: Tensor<B, 3>,
         max_iteration: usize,
@@ -235,10 +235,9 @@ impl<B: Backend> TrOCRForCausalLM<B> {
             res_ids = Tensor::cat(vec![res_ids, idx.clone()], 1);
 
             if Tensor::all(idx.clone().equal_elem(2))
-                .to_data()
-                .as_slice::<bool>()
-                .unwrap()
-                == &[true]
+                .into_scalar_async()
+                .await
+                == true
             {
                 break;
             };
@@ -247,7 +246,7 @@ impl<B: Backend> TrOCRForCausalLM<B> {
         res_ids
     }
 
-    pub fn generate_without_cache(
+    async fn generate_without_cache_async(
         &self,
         encoder_res: Tensor<B, 3>,
         max_iteration: usize,
@@ -281,17 +280,27 @@ impl<B: Backend> TrOCRForCausalLM<B> {
                 .reshape([batch_size, 1]);
             res_ids = res_ids.slice_assign([0..batch_size, (i + 1)..(i + 2)], idx.clone());
 
-            if Tensor::all(idx.equal_elem(2))
-                .to_data()
-                .as_slice::<bool>()
-                .unwrap()
-                == &[true]
-            {
+            if Tensor::all(idx.equal_elem(2)).into_scalar_async().await == true {
                 break;
             };
         }
 
         res_ids
+    }
+
+    pub async fn generate_async(
+        &self,
+        encoder_res: Tensor<B, 3>,
+        max_iteration: usize,
+        use_cache: bool,
+    ) -> Tensor<B, 2, Int> {
+        if use_cache {
+            self.generate_with_cache_async(encoder_res, max_iteration)
+                .await
+        } else {
+            self.generate_without_cache_async(encoder_res, max_iteration)
+                .await
+        }
     }
 
     pub fn generate(
@@ -300,11 +309,8 @@ impl<B: Backend> TrOCRForCausalLM<B> {
         max_iteration: usize,
         use_cache: bool,
     ) -> Tensor<B, 2, Int> {
-        if use_cache {
-            self.generate_with_cache(encoder_res, max_iteration)
-        } else {
-            self.generate_without_cache(encoder_res, max_iteration)
-        }
+        try_read_sync(self.generate_async(encoder_res, max_iteration, use_cache))
+            .expect("Failed to synchonously generate data.")
     }
 }
 

@@ -8,7 +8,10 @@ edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
-burn = { git = "https://github.com/tracel-ai/burn.git", default-features = false }
+# burn = { git = "https://github.com/tracel-ai/burn.git", rev = "5a0c1dc", default-features = false }
+# burn-wgpu = { git = "https://github.com/tracel-ai/burn.git", rev = "5a0c1dc", default-features = false }
+burn = { git = "https://github.com/wcshds/burn.git", branch = "cubecl-wcshds", default-features = false }
+burn-wgpu = { git = "https://github.com/wcshds/burn.git", branch = "cubecl-wcshds", default-features = false }
 image = "0.25.1"
 tokenizers = "0.19.1"
 

@@ -31,6 +31,6 @@ candle-gpu = ["burn/candle-cuda"]
 
 [dependencies]
 burn = { workspace = true }
-burn-wgpu = { git = "https://github.com/tracel-ai/burn.git", default-features = false, optional = true }
+burn-wgpu = { workspace = true, default-features = false, optional = true }
 typress-core = { path = "../typress-core" }
 tokenizers = { workspace = true }
