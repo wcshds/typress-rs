@@ -28,7 +28,7 @@ cargo run --release --features wgpu -- cpu // `WgpuDevice::Cpu`
 ```
 
 ## Web Page Example
-This example shows how to run the model totally in browser.
+This example shows how to run the model totally in browser. [LIVE DEMO](https://typress-web.vercel.app/)
 
 Executes following commands in order.
 
