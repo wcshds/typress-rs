@@ -23,11 +23,12 @@ let worker: Worker | null = null;
 // typress result string
 let resString = ref("");
 // flags
+let useRustResizeImage = ref(true); // Whether to use rust to resize the image
 let isMainLoading = ref(true);
 let isResLoading = ref(false);
 let mainLoadingInfo = ref("正在加載資源...");
 // execution time
-let start = null;
+let start = 0;
 let timeCost = ref(Infinity);
 
 onMounted(async () => {
@@ -86,25 +87,35 @@ async function handleImageChange(event: Event) {
           img.onload = resolve;
         });
 
-        // make sure the image is displayed on the page immediately after uploading it
-        ctx?.clearRect(0, 0, 384, 384);
-        // display the image on the canvas and resize the image
-        ctx?.drawImage(img, 0, 0, 384, 384);
-        if (imageCanvas.value !== null && ctx !== null) {
-          let imageData = extractRGBValuesFromCanvas(imageCanvas.value, ctx);
-
-          if (worker) {
-            worker.onmessage = function (event) {
-              if (event.data.status == "success") {
-                resString.value = event.data.data;
-                isResLoading.value = false;
-                timeCost.value = performance.now() - start;
-                console.log(resString.value);
-              }
-            };
-            let start = performance.now();
-            worker.postMessage({ type: "inference", data: imageData });
+        if (worker) {
+          let imageData;
+          if (useRustResizeImage.value) {
+            imageData = base64ToUint8Array(img.src);
+          } else {
+            ctx?.clearRect(0, 0, 384, 384);
+            // display the image on the canvas and resize the image
+            ctx?.drawImage(img, 0, 0, 384, 384);
+            if (imageCanvas.value !== null && ctx !== null) {
+              imageData = extractRGBValuesFromCanvas(imageCanvas.value, ctx);
+            }
           }
+
+          worker.onmessage = function (event) {
+            if (event.data.status == "success") {
+              resString.value = event.data.data;
+              isResLoading.value = false;
+              timeCost.value = performance.now() - start;
+              console.log(resString.value);
+            }
+          };
+          start = performance.now();
+          worker.postMessage({
+            type: "inference",
+            data: {
+              imageData: imageData,
+              isRawImageData: useRustResizeImage.value,
+            },
+          });
         }
       }
     };
@@ -122,6 +133,20 @@ function reset(resetImageInput: Boolean = false) {
   if (resetImageInput && imageInput.value !== null) {
     imageInput.value.value = "";
   }
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const base64String = base64.split(",")[1];
+
+  const binaryString = window.atob(base64String);
+  const length = binaryString.length;
+  const bytes = new Uint8Array(length);
+
+  for (let i = 0; i < length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  return bytes;
 }
 
 function extractRGBValuesFromCanvas(
@@ -164,8 +189,8 @@ function extractRGBValuesFromCanvas(
 
   <main class="container mx-auto">
     <GSpinner :active="isMainLoading" :info="mainLoadingInfo">
-      <div class="h-screen pt-32">
-        <div class="mb-2 flex items-center gap-4">
+      <div class="h-screen pt-28">
+        <div class="mb-2 flex flex-col items-start gap-4">
           <!-- Backend Selection -->
           <div>
             <label for="backend">後端：</label>
@@ -181,6 +206,19 @@ function extractRGBValuesFromCanvas(
               <option :value="BackendType.Candle">CPU - Candle</option>
               <option :value="BackendType.Webgpu">GPU - WebGPU</option>
             </select>
+          </div>
+
+          <!-- Whether to use rust to resize the image -->
+          <div class="flex cursor-pointer select-none gap-2">
+            <input
+              type="checkbox"
+              id="checkbox"
+              class="cursor-pointer"
+              v-model="useRustResizeImage"
+            />
+            <label for="checkbox" class="cursor-pointer">
+              调整图像大小时是否使用Rust
+            </label>
           </div>
 
           <!-- Image Input -->

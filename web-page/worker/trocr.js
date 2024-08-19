@@ -49,6 +49,15 @@ async function inference(imageData) {
   }
 }
 
+async function inference_from_raw(rawImageData) {
+  try {
+    let res = await trocr?.inference_from_raw(rawImageData);
+    self.postMessage({ status: "success", data: res });
+  } catch {
+    self.postMessage({ status: "fail", data: "" });
+  }
+}
+
 self.onmessage = async function (event) {
   const { type, data } = event.data;
   switch (type) {
@@ -65,7 +74,11 @@ self.onmessage = async function (event) {
       await set_backend_wgpu();
       break;
     case "inference":
-      await inference(data);
+      if (data["isRawImageData"]) {
+        await inference_from_raw(data["imageData"]);
+      } else {
+        await inference(data["imageData"]);
+      }
       break;
     default:
       console.error("Unknown task type:", type);

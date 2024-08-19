@@ -7,7 +7,7 @@ version.workspace = true
 
 [features]
 default = ["ndarray", "std"]
-std = ["burn/std"]
+std = ["burn/std", "image/default"]
 ndarray = ["burn/ndarray"]
 tch = ["burn/tch"]
 

@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, string::String};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use burn::{
     module::Module,
     prelude::Backend,
@@ -53,4 +53,12 @@ pub fn decode(ids: &[u32], skip_special_tokens: bool) -> String {
         })
         .map(|each| each.replace("Ġ", " "))
         .collect()
+}
+
+pub fn read_and_resized_single_image(data: &[u8]) -> Vec<u8> {
+    let res = image::load_from_memory(data).expect("Fail to read the image from data.");
+    let resized = res.resize_exact(384, 384, image::imageops::FilterType::CatmullRom);
+    let img_vec = resized.into_rgb8().into_vec();
+
+    img_vec
 }

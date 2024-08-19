@@ -16,6 +16,7 @@ burn = { workspace = true, features = ["ndarray", "candle", "wgpu"] }
 typress-core = { path = "../typress-core", default-features = false, features = [
     "ndarray",
 ] }
+image = { workspace = true, features = ["default"] }
 once_cell = { version = "1.19.0", features = ["alloc"] }
 
 log = "0.4.22"

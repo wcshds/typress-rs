@@ -14,7 +14,7 @@ use burn::{
 
 use wasm_bindgen::prelude::*;
 
-use crate::utils::{decode, load_decoder, load_deit_model};
+use crate::utils::{decode, load_decoder, load_deit_model, read_and_resized_single_image};
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -96,6 +96,44 @@ impl TrOCR {
         Ok(res_str)
     }
 
+    /// Runs inference on the image
+    ///
+    /// ## Parameters:
+    ///
+    /// input: raw image data in bytes
+    pub async fn inference_from_raw(&self, input: &[u8]) -> Result<String, JsValue> {
+        log::info!("Generate Typst formula from the image...");
+
+        let res_ids = match self.current_backend {
+            ModelBackend::NdArray => {
+                let model = self
+                    .with_ndarray_backend
+                    .as_ref()
+                    .expect("Internel error: fail to select NdArray backend.");
+                model.generate_from_raw(input).await
+            }
+            ModelBackend::Candle => {
+                let model = self
+                    .with_candle_backend
+                    .as_ref()
+                    .expect("Internel error: fail to select Candle backend.");
+                model.generate_from_raw(input).await
+            }
+            ModelBackend::Wgpu => {
+                let model = self
+                    .with_wgpu_backend
+                    .as_ref()
+                    .expect("Internel error: fail to select Wgpu backend.");
+                model.generate_from_raw(input).await
+            }
+        };
+        let res_str = decode(&res_ids, true);
+
+        log::debug!("Inference is completed.");
+
+        Ok(res_str)
+    }
+
     /// Sets the backend to Candle
     pub async fn set_backend_candle(&mut self) -> Result<(), JsValue> {
         log::info!("Loading the model to the Candle backend");
@@ -131,7 +169,16 @@ impl TrOCR {
             log::debug!("Model is loaded to the Wgpu backend.");
 
             log::debug!("Warming up the model");
-            let _ = self.inference(&[0.0; HEIGHT * WIDTH * CHANNELS]).await;
+            let wgpu_backend = self.with_wgpu_backend.as_ref().unwrap();
+            let input = Tensor::zeros([1, CHANNELS, HEIGHT, WIDTH], &device);
+            let input = (input
+                - Tensor::<Wgpu, 1>::from_floats([0.5, 0.5, 0.5], &device).reshape([1, 3, 1, 1]))
+                / Tensor::<Wgpu, 1>::from_floats([0.5, 0.5, 0.5], &device).reshape([1, 3, 1, 1]);
+            let encoder_res = wgpu_backend.encoder.forward(input);
+            let _ = wgpu_backend
+                .decoder
+                .generate_async(encoder_res, 200, true)
+                .await;
             log::debug!("Warming up is completed.");
         } else {
             self.current_backend = ModelBackend::Wgpu;
@@ -166,6 +213,35 @@ impl<B: Backend> Model<B> {
         let device = B::Device::default();
         let input =
             Tensor::<B, 1>::from_floats(input, &device).reshape([1, CHANNELS, HEIGHT, WIDTH]);
+
+        self.generate_from_tensor(input).await
+    }
+
+    /// Generate labels for each id from raw image data.
+    ///
+    /// ## Parameters:
+    ///
+    /// input: raw image data in bytes.
+    pub async fn generate_from_raw(&self, input: &[u8]) -> Vec<u32> {
+        let device = B::Device::default();
+        let input = read_and_resized_single_image(input);
+        let input: Tensor<B, 4> = Tensor::from_data(
+            TensorData::new(input, [1, HEIGHT, WIDTH, CHANNELS]),
+            &device,
+        );
+        let input = input.permute([0, 3, 1, 2]);
+        let input = input * (1.0 / 255.0);
+
+        self.generate_from_tensor(input).await
+    }
+
+    /// Generate labels for each id from a tensor.
+    ///
+    /// ## Parameters:
+    ///
+    /// input: a rescaled tensor of shape `[batch_size, channels, height, width]`, not normalized yet.
+    async fn generate_from_tensor(&self, input: Tensor<B, 4>) -> Vec<u32> {
+        let device = input.device();
         // normalize
         let input = (input
             - Tensor::<B, 1>::from_floats([0.5, 0.5, 0.5], &device).reshape([1, 3, 1, 1]))
