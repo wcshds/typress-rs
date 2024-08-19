@@ -29,16 +29,16 @@ const WIDTH: usize = 384;
 const CHANNELS: usize = 3;
 
 enum ModelBackend {
-    NdArray,
     Candle,
+    NdArray,
     Wgpu,
 }
 
 /// The TrOCR text recoginzer
 #[wasm_bindgen]
 pub struct TrOCR {
-    with_ndarray_backend: Option<Model<NdArray<f32>>>,
     with_candle_backend: Option<Model<Candle<f32, i64>>>,
+    with_ndarray_backend: Option<Model<NdArray<f32>>>,
     with_wgpu_backend: Option<Model<Wgpu<f32, i32>>>,
     current_backend: ModelBackend,
 }
@@ -51,10 +51,10 @@ impl TrOCR {
         log::info!("Initializing the Typress model...");
         let device = Default::default();
         Self {
-            with_ndarray_backend: Some(Model::new(&device)),
-            with_candle_backend: None,
+            with_candle_backend: Some(Model::new(&device)),
+            with_ndarray_backend: None,
             with_wgpu_backend: None,
-            current_backend: ModelBackend::NdArray,
+            current_backend: ModelBackend::Candle,
         }
     }
 
@@ -67,18 +67,18 @@ impl TrOCR {
         log::info!("Generate Typst formula from the image...");
 
         let res_ids = match self.current_backend {
-            ModelBackend::NdArray => {
-                let model = self
-                    .with_ndarray_backend
-                    .as_ref()
-                    .expect("Internel error: fail to select NdArray backend.");
-                model.generate(input).await
-            }
             ModelBackend::Candle => {
                 let model = self
                     .with_candle_backend
                     .as_ref()
                     .expect("Internel error: fail to select Candle backend.");
+                model.generate(input).await
+            }
+            ModelBackend::NdArray => {
+                let model = self
+                    .with_ndarray_backend
+                    .as_ref()
+                    .expect("Internel error: fail to select NdArray backend.");
                 model.generate(input).await
             }
             ModelBackend::Wgpu => {
@@ -105,18 +105,18 @@ impl TrOCR {
         log::info!("Generate Typst formula from the image...");
 
         let res_ids = match self.current_backend {
-            ModelBackend::NdArray => {
-                let model = self
-                    .with_ndarray_backend
-                    .as_ref()
-                    .expect("Internel error: fail to select NdArray backend.");
-                model.generate_from_raw(input).await
-            }
             ModelBackend::Candle => {
                 let model = self
                     .with_candle_backend
                     .as_ref()
                     .expect("Internel error: fail to select Candle backend.");
+                model.generate_from_raw(input).await
+            }
+            ModelBackend::NdArray => {
+                let model = self
+                    .with_ndarray_backend
+                    .as_ref()
+                    .expect("Internel error: fail to select NdArray backend.");
                 model.generate_from_raw(input).await
             }
             ModelBackend::Wgpu => {

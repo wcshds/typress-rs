@@ -5,12 +5,12 @@ useSeoMeta({
 
 // select backend
 enum BackendType {
-  Ndarray,
   Candle,
+  Ndarray,
   Webgpu,
 }
 
-const backendSelect = ref(BackendType.Ndarray);
+const backendSelect = ref(BackendType.Candle);
 
 // ref dom
 const imageCanvas: Ref<HTMLCanvasElement | null> = ref(null);
@@ -60,12 +60,12 @@ watch(backendSelect, () => {
       }
     };
   }
-  if (backendSelect.value === BackendType.Ndarray) {
-    reset(true);
-    worker?.postMessage({ type: "set_backend_ndarray", data: "" });
-  } else if (backendSelect.value === BackendType.Candle) {
+  if (backendSelect.value === BackendType.Candle) {
     reset(true);
     worker?.postMessage({ type: "set_backend_candle", data: "" });
+  } else if (backendSelect.value === BackendType.Ndarray) {
+    reset(true);
+    worker?.postMessage({ type: "set_backend_ndarray", data: "" });
   } else {
     reset(true);
     worker?.postMessage({ type: "set_backend_wgpu", data: "" });
@@ -236,10 +236,8 @@ function extractRGBValuesFromCanvas(
               :disabled="isResLoading"
               v-model="backendSelect"
             >
-              <option :value="BackendType.Ndarray" selected>
-                CPU - Ndarray
-              </option>
-              <option :value="BackendType.Candle">CPU - Candle</option>
+              <option :value="BackendType.Candle" selected>CPU - Candle</option>
+              <option :value="BackendType.Ndarray">CPU - Ndarray</option>
               <option :value="BackendType.Webgpu">GPU - WebGPU</option>
             </select>
           </div>
@@ -261,7 +259,7 @@ function extractRGBValuesFromCanvas(
               class="cursor-pointer disabled:opacity-50"
               :disabled="isResLoading"
             >
-              调整图像大小时是否使用Rust
+              調整圖像大小時是否使用Rust
             </label>
           </div>
 
