@@ -46,6 +46,8 @@ onMounted(async () => {
     }
   };
   worker.postMessage({ type: "init", data: "" });
+
+  document.addEventListener("paste", handleImagePaste);
 });
 
 watch(backendSelect, () => {
@@ -70,58 +72,92 @@ watch(backendSelect, () => {
   }
 });
 
-async function handleImageChange(event: Event) {
+async function handleImageFileUpload(event: Event) {
   let target = event.target as HTMLInputElement;
+
+  if (!target.files) return;
+  if (target.files.length <= 0) return;
+
   reset(false);
   isResLoading.value = true;
 
-  if (target.files && target.files.length > 0) {
-    let file = target.files[0];
+  let file = target.files[0];
+  doInference(file);
+}
 
-    let reader = new FileReader();
-    reader.onload = async (event) => {
-      if (imageDisplay.value !== null) {
-        let img = imageDisplay.value;
-        img.src = event.target?.result as string;
-        await new Promise((resolve) => {
-          img.onload = resolve;
-        });
+async function handleImagePaste(event: ClipboardEvent) {
+  if (isMainLoading.value || isResLoading.value) return;
 
-        if (worker) {
-          let imageData;
-          if (useRustResizeImage.value) {
-            imageData = base64ToUint8Array(img.src);
-          } else {
-            ctx?.clearRect(0, 0, 384, 384);
-            // display the image on the canvas and resize the image
-            ctx?.drawImage(img, 0, 0, 384, 384);
-            if (imageCanvas.value !== null && ctx !== null) {
-              imageData = extractRGBValuesFromCanvas(imageCanvas.value, ctx);
-            }
-          }
+  if (!event.clipboardData) return;
 
-          worker.onmessage = function (event) {
-            if (event.data.status == "success") {
-              resString.value = event.data.data;
-              isResLoading.value = false;
-              timeCost.value = performance.now() - start;
-              console.log(resString.value);
-            }
-          };
-          start = performance.now();
-          worker.postMessage({
-            type: "inference",
-            data: {
-              imageData: imageData,
-              isRawImageData: useRustResizeImage.value,
-            },
-          });
+  const pText = event.clipboardData.getData("text/plain");
+  if (pText) return;
+
+  const items = event.clipboardData.items;
+  if (
+    !items ||
+    items[0].kind !== "file" ||
+    items[0].type.indexOf("image") === -1
+  ) {
+    console.log("No image file in clipboard data.");
+    return;
+  }
+
+  const blob = items[0].getAsFile();
+  if (!blob) {
+    console.log("Failed to convert pasted file.");
+    return;
+  }
+
+  reset(true);
+  isResLoading.value = true;
+  doInference(blob);
+}
+
+function doInference(file: Blob) {
+  let reader = new FileReader();
+  reader.onload = async (event) => {
+    if (imageDisplay.value !== null) {
+      let img = imageDisplay.value;
+      img.src = event.target?.result as string;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+
+      if (!worker) return;
+
+      let imageData;
+      if (useRustResizeImage.value) {
+        imageData = base64ToUint8Array(img.src);
+      } else {
+        ctx?.clearRect(0, 0, 384, 384);
+        // display the image on the canvas and resize the image
+        ctx?.drawImage(img, 0, 0, 384, 384);
+        if (imageCanvas.value !== null && ctx !== null) {
+          imageData = extractRGBValuesFromCanvas(imageCanvas.value, ctx);
         }
       }
-    };
 
-    reader.readAsDataURL(file);
-  }
+      worker.onmessage = function (event) {
+        if (event.data.status == "success") {
+          resString.value = event.data.data;
+          isResLoading.value = false;
+          timeCost.value = performance.now() - start;
+          console.log(resString.value);
+        }
+      };
+      start = performance.now();
+      worker.postMessage({
+        type: "inference",
+        data: {
+          imageData: imageData,
+          isRawImageData: useRustResizeImage.value,
+        },
+      });
+    }
+  };
+
+  reader.readAsDataURL(file);
 }
 
 function reset(resetImageInput: Boolean = false) {
@@ -209,14 +245,22 @@ function extractRGBValuesFromCanvas(
           </div>
 
           <!-- Whether to use rust to resize the image -->
-          <div class="flex cursor-pointer select-none gap-2">
+          <div
+            class="flex cursor-pointer select-none gap-2"
+            :disabled="isResLoading"
+          >
             <input
               type="checkbox"
               id="checkbox"
               class="cursor-pointer"
               v-model="useRustResizeImage"
+              :disabled="isResLoading"
             />
-            <label for="checkbox" class="cursor-pointer">
+            <label
+              for="checkbox"
+              class="cursor-pointer disabled:opacity-50"
+              :disabled="isResLoading"
+            >
               调整图像大小时是否使用Rust
             </label>
           </div>
@@ -225,7 +269,7 @@ function extractRGBValuesFromCanvas(
           <div>
             <input
               type="file"
-              @change="handleImageChange"
+              @change="handleImageFileUpload"
               accept="image/*"
               :disabled="isResLoading"
               ref="imageInput"
@@ -240,7 +284,21 @@ function extractRGBValuesFromCanvas(
           <img
             ref="imageDisplay"
             class="max-h-[200px] max-w-[384px] rounded-md border-[1.5px]"
+            v-show="isResLoading || resString.length > 0"
           />
+          <div
+            class="flex items-center gap-2"
+            v-show="(!isResLoading && resString.length === 0) || isMainLoading"
+          >
+            <IconInformation
+              class="w-8 flex-shrink-0 text-sky-500"
+            ></IconInformation>
+            <p class="select-none text-justify text-xl text-slate-600">
+              上傳圖片進行公式識别，或
+              <span class="text-nowrap">Ctrl + V</span>
+              可識別剪切板內的圖片
+            </p>
+          </div>
         </div>
 
         <div>
