@@ -41,3 +41,13 @@ cd ../web-page
 pnpm install
 pnpm dev
 ```
+
+# Converting the model to Burn compatible format
+
+```
+cd typress-rs/convert
+
+cargo run --release
+```
+
+The converted files will appear in the `./weights` directory.

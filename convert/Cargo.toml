@@ -1,0 +1,10 @@
+[package]
+name = "convert"
+authors = ["WU Chen (@wcshds)"]
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+burn = { workspace = true, default-features = false, features = ["ndarray"] }
+typress-core = { path = "../typress-core" }
