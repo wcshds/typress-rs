@@ -42,7 +42,7 @@ mod candle_gpu {
     use typress_inference::inference;
 
     pub fn run() {
-        let device = CandleDevice::Cuda(0);
+        let device = CandleDevice::cuda(0);
         inference::<Candle>(&device);
     }
 }
@@ -77,10 +77,10 @@ mod wgpu {
                 "discrete_gpu" | "discreted_gpu" | "discretegpu" | "discretedgpu" => {
                     WgpuDevice::DiscreteGpu(0)
                 }
-                _ => WgpuDevice::BestAvailable,
+                _ => WgpuDevice::DefaultDevice,
             }
         } else {
-            WgpuDevice::BestAvailable
+            WgpuDevice::DefaultDevice
         };
 
         inference::<Wgpu>(&device);

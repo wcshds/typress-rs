@@ -6,7 +6,7 @@ use typress_core::model::{deit::deit_model::DeiTModel, trocr::decoder::TrOCRForC
 
 use burn::{
     backend::{
-        wgpu::{init_async, AutoGraphicsApi, WgpuDevice},
+        wgpu::{init_setup_async, AutoGraphicsApi, WgpuDevice},
         Candle, NdArray, Wgpu,
     },
     prelude::*,
@@ -163,7 +163,7 @@ impl TrOCR {
         log::info!("Loading the model to the Wgpu backend");
         if self.with_wgpu_backend.is_none() {
             let device = WgpuDevice::default();
-            init_async::<AutoGraphicsApi>(&device, Default::default()).await;
+            init_setup_async::<AutoGraphicsApi>(&device, Default::default()).await;
             self.with_wgpu_backend = Some(Model::new(&device));
             self.current_backend = ModelBackend::Wgpu;
             log::debug!("Model is loaded to the Wgpu backend.");

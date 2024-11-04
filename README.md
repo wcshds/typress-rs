@@ -21,7 +21,7 @@ cargo run --release --features candle-gpu
 cargo run --release --features candle-cpu
 
 // wgpu, device is configurable
-cargo run --release --features wgpu // default choice is `WgpuDevice::BestAvailable`
+cargo run --release --features wgpu // default choice is `WgpuDevice::DefaultDevice`
 cargo run --release --features wgpu -- integrated_gpu // `WgpuDevice::IntegratedGpu(0)`
 cargo run --release --features wgpu -- discrete_gpu // `WgpuDevice::DiscreteGpu(0)`
 cargo run --release --features wgpu -- cpu // `WgpuDevice::Cpu`
